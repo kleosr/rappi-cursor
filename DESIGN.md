@@ -8,7 +8,7 @@ Sidebar webview for Rappi Cursor. Product/tool UI (not a marketing landing page)
 |-------|-------|--------|
 | `--rappi-accent` | `#FF441F` | Official Rappi orange (logo fill from Rappi assets) |
 | `--rappi-accent-hover` | `#E03A1A` | Darken ~8% |
-| Wordmark / mark | `media/rappi-wordmark.svg`, `media/rappi.svg`, `media/icon.png` | Official wordmark (Lupe/Rappi SVG) + activity bar tile + marketplace icon |
+| Wordmark / mark | `media/rappi-wordmark.svg`, `media/rappi.svg`, `media/icon.png` | Color wordmark (sidebar); **monochrome** activity-bar SVG (`#C5C5C5` mask); marketplace PNG |
 
 Stay on VS Code theme tokens for surfaces/text so light and dark IDE themes work.
 
