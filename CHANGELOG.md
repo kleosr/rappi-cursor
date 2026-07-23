@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Activity bar icon: monochrome Rappi wordmark (VS Code/Cursor tint mask; no solid orange tile)
+
 ## 0.1.1
 
 - Official Rappi wordmark / activity icon / marketplace icon (`#FF441F`)
