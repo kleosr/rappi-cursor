@@ -358,8 +358,8 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
       <button class="ghost" id="btnRestaurants">Nearby</button>
       <button class="ghost" id="btnSync">Sync</button>
     </div>
+    <div id="productOut" class="product-out" aria-live="polite"></div>
     <div id="browseOut"><div class="empty"><strong>Search Rappi</strong>Find restaurants and products near you.</div></div>
-    <div id="productOut"></div>
   </section>
 
   <section id="cart" class="panel" role="tabpanel" hidden>
@@ -408,7 +408,15 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
       el.style.display = "block";
       setTimeout(() => { el.style.display = "none"; }, 2500);
     }
-    function setErr(msg) { $("err").textContent = msg || ""; }
+    function setErr(msg) {
+      $("err").textContent = msg || "";
+      if (msg) {
+        const pout = $("productOut");
+        if (pout && /Loading options/i.test(pout.textContent || "")) {
+          pout.innerHTML = "";
+        }
+      }
+    }
     function money(n) {
       try { return "$" + Number(n||0).toLocaleString("es-CO"); }
       catch { return "$" + n; }
@@ -510,21 +518,48 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
 
     function productButtons(root) {
       root.querySelectorAll("[data-prod]").forEach((btn) => {
-        btn.onclick = () => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          setErr("");
           const hasTop = btn.getAttribute("data-top") === "1";
+          const rawId = btn.getAttribute("data-prod") || "";
+          const productIdNum = Number(rawId);
           const payload = {
             storeId: Number(btn.getAttribute("data-store")),
-            productId: btn.getAttribute("data-prod"),
+            productId: rawId,
             name: btn.getAttribute("data-name"),
             price: Number(btn.getAttribute("data-price")),
             storeType: btn.getAttribute("data-store-type") || "restaurant",
           };
           if (hasTop) {
+            if (!Number.isFinite(productIdNum) || productIdNum <= 0) {
+              setErr("Invalid product id for options: " + rawId);
+              return;
+            }
             setLoading($("productOut"), "Loading options…");
-            vscode.postMessage({ type: "product", ...payload, productId: Number(payload.productId) });
+            vscode.postMessage({
+              type: "product",
+              ...payload,
+              productId: productIdNum,
+            });
           } else {
             vscode.postMessage({ type: "addToCart", ...payload, quantity: 1, toppings: [] });
           }
+        };
+      });
+    }
+    function bindStoreOpen(root) {
+      root.querySelectorAll("[data-store-open]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          setErr("");
+          $("productOut").innerHTML = "";
+          setLoading($("browseOut"), "Cargando menú…");
+          vscode.postMessage({
+            type: "store",
+            storeId: Number(btn.getAttribute("data-store-open")),
+          });
         };
       });
     }
@@ -626,6 +661,7 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
           break;
         case "error":
           setErr(msg.message);
+          if ($("productOut")) $("productOut").innerHTML = "";
           break;
         case "toast":
           showToast(msg.message);
@@ -638,22 +674,26 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
           }
           $("browseOut").innerHTML = stores.map((s) => {
             const products = (s.products||[]).slice(0,5).map((p) =>
-              '<div class="row-item">' +
+              '<div class="row-item anim-in">' +
                 '<div><p class="title">' + escapeHtml(p.name) + '</p>' +
                 '<div class="meta">' + (p.has_toppings ? '<span class="badge">options</span> ' : '') +
                 'id ' + p.product_id + '</div></div>' +
                 '<div class="actions"><span class="price">' + money(p.price) + '</span>' +
-                '<button class="' + (p.has_toppings ? 'ghost' : 'primary') + '" data-prod="' + p.product_id +
+                '<button type="button" class="primary" data-prod="' + p.product_id +
                 '" data-store="' + s.store_id + '" data-store-type="' + escapeHtml(s.store_type || 'restaurant') +
                 '" data-name="' + escapeHtml(p.name) +
                 '" data-price="' + p.price + '" data-top="' + (p.has_toppings?"1":"0") + '">' +
                 (p.has_toppings ? "Options" : "Add") + '</button></div></div>'
             ).join("");
-            return '<div class="store-block"><div class="heading">[' + s.store_id + '] ' +
+            return '<div class="store-block anim-in"><div class="heading">[' + s.store_id + '] ' +
               escapeHtml(s.store_name) + '</div><div class="meta">' + escapeHtml(s.eta||'') +
               ' · ship ' + money(s.shipping_cost) + ' · ' + escapeHtml(s.store_type||'') +
-              '</div>' + products + '</div>';
+              '</div><div class="row" style="margin:8px 0">' +
+              '<button type="button" class="ghost" data-store-open="' + s.store_id +
+              '" data-store-type="' + escapeHtml(s.store_type || 'restaurant') + '">Ver menú</button></div>' +
+              products + '</div>';
           }).join("");
+          bindStoreOpen($("browseOut"));
           productButtons($("browseOut"));
           break;
         }
@@ -664,39 +704,51 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
             break;
           }
           $("browseOut").innerHTML = stores.map((s) =>
-            '<div class="row-item"><div><p class="title">[' + s.store_id + '] ' + escapeHtml(s.name) + '</p>' +
+            '<div class="row-item anim-in"><div><p class="title">[' + s.store_id + '] ' + escapeHtml(s.name) + '</p>' +
             '<div class="meta">' + escapeHtml(s.eta||'') + ' · ' + money(s.shipping_cost) +
             (s.is_available ? '' : ' · closed') + '</div></div>' +
-            '<button class="ghost" data-store-open="' + s.store_id + '">Menu</button></div>'
+            '<button type="button" class="primary" data-store-open="' + s.store_id +
+            '" data-store-type="restaurant">Ver menú</button></div>'
           ).join("");
-          $("browseOut").querySelectorAll("[data-store-open]").forEach((btn) => {
-            btn.onclick = () => {
-              setLoading($("browseOut"), "Loading menu…");
-              vscode.postMessage({ type: "store", storeId: Number(btn.getAttribute("data-store-open")) });
-            };
-          });
+          bindStoreOpen($("browseOut"));
           break;
         }
         case "storeResult": {
           const store = msg.store;
           const corridors = store.corridors || [];
           const storeTypeId = (store.store_type && (store.store_type.id || store.store_type)) || "restaurant";
-          $("browseOut").innerHTML =
-            '<div class="store-block"><div class="heading">' + escapeHtml(store.name) + '</div>' +
+          let html =
+            '<div class="store-block anim-in"><div class="row" style="margin-bottom:8px">' +
+            '<button type="button" class="ghost" id="btnBackBrowse">← Volver</button></div>' +
+            '<div class="heading">' + escapeHtml(store.name) + '</div>' +
             '<div class="meta">' + escapeHtml(store.address||'') + ' · ' +
-            escapeHtml(store.status?.status||'') + ' · ' + escapeHtml(String(storeTypeId)) + '</div></div>' +
-            corridors.map((c) =>
-              '<div class="section-label">' + escapeHtml(c.name) + '</div>' +
-              (c.products||[]).slice(0,12).map((p) =>
-                '<div class="row-item"><div><p class="title">' + escapeHtml(p.name) + '</p></div>' +
+            escapeHtml(store.status?.status||'') + ' · ' + escapeHtml(String(storeTypeId)) + '</div></div>';
+          if (!corridors.length) {
+            html += empty("Sin menú", "Esta tienda no devolvió corredores/productos.");
+          } else {
+            html += corridors.map((c) =>
+              '<div class="section-label anim-in">' + escapeHtml(c.name) +
+              ' <span class="meta">(' + ((c.products||[]).length) + ')</span></div>' +
+              (c.products||[]).map((p) =>
+                '<div class="row-item anim-in"><div><p class="title">' + escapeHtml(p.name) + '</p>' +
+                (p.has_toppings ? '<div class="meta"><span class="badge">options</span></div>' : '') +
+                '</div>' +
                 '<div class="actions"><span class="price">' + money(p.price) + '</span>' +
-                '<button class="' + (p.has_toppings ? 'ghost' : 'primary') + '" data-prod="' + p.id +
+                '<button type="button" class="primary" data-prod="' + p.id +
                 '" data-store="' + store.store_id + '" data-store-type="' + escapeHtml(String(storeTypeId)) +
                 '" data-name="' + escapeHtml(p.name) +
                 '" data-price="' + p.price + '" data-top="' + (p.has_toppings?"1":"0") + '">' +
                 (p.has_toppings?"Options":"Add") + '</button></div></div>'
               ).join("")
             ).join("");
+          }
+          $("browseOut").innerHTML = html;
+          const back = $("btnBackBrowse");
+          if (back) back.onclick = () => {
+            $("productOut").innerHTML = "";
+            setLoading($("browseOut"), "Loading restaurants…");
+            vscode.postMessage({ type: "restaurants", limit: 20 });
+          };
           productButtons($("browseOut"));
           break;
         }
@@ -706,16 +758,22 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
             '<div class="section-label">Customize</div>' +
             '<div class="row-item"><div><p class="title">' + escapeHtml(msg.name) + '</p></div>' +
             '<span class="price">' + money(msg.price) + '</span></div>' +
-            cats.map((cat, i) =>
-              '<div class="topping-cat"><strong>' + escapeHtml(cat.description) +
-              (cat.min_toppings_for_categories > 0 ? ' <span class="badge">required</span>' : '') +
-              '</strong>' +
-              (cat.toppings||[]).map((t) =>
-                '<label><input type="checkbox" data-tid="' + t.id + '" data-cat="' + i + '" />' +
-                '<span>' + escapeHtml(t.description) + ' <span class="price">' + money(t.price) + '</span></span></label>'
-              ).join("") + '</div>'
-            ).join("") +
-            '<button class="primary" id="btnAddConfigured">Add to cart</button>';
+            (cats.length
+              ? cats.map((cat, i) =>
+                  '<div class="topping-cat"><strong>' + escapeHtml(cat.description) +
+                  (cat.min_toppings_for_categories > 0 ? ' <span class="badge">required</span>' : '') +
+                  '</strong>' +
+                  (cat.toppings||[]).map((t) =>
+                    '<label><input type="checkbox" data-tid="' + t.id + '" data-cat="' + i + '" />' +
+                    '<span>' + escapeHtml(t.description) + ' <span class="price">' + money(t.price) + '</span></span></label>'
+                  ).join("") + '</div>'
+                ).join("")
+              : '<div class="meta" style="margin:8px 0">No toppings returned for this product.</div>') +
+            '<div class="row" style="margin-top:8px">' +
+            '<button type="button" class="primary" id="btnAddConfigured">Add to cart</button>' +
+            '<button type="button" class="ghost" id="btnClearOptions">Close</button></div>';
+          try { $("productOut").scrollIntoView({ block: "nearest" }); } catch (_) {}
+          $("btnClearOptions").onclick = () => { $("productOut").innerHTML = ""; };
           $("btnAddConfigured").onclick = () => {
             const toppings = [...document.querySelectorAll("#productOut input[data-tid]:checked")]
               .map((el) => Number(el.getAttribute("data-tid")));

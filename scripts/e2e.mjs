@@ -229,7 +229,33 @@ async function mockFetch(url, init = {}) {
     /^\/api\/web-gateway\/web\/stores-router\/id\/\d+\/$/.test(path)
   ) {
     return json({
-      store: { id: 900022095, name: "Exito", store_type: { id: "market" } },
+      store_id: 900022095,
+      name: "Exito",
+      address: "Calle 1",
+      store_type: { id: "market", description: "market" },
+      status: { status: "open" },
+    });
+  }
+  if (
+    method === "GET" &&
+    /^\/api\/restaurant-bus\/store\/\d+\/menu$/.test(path)
+  ) {
+    return json({
+      corridors: [
+        {
+          id: 1,
+          name: "Destacados",
+          products: [
+            {
+              id: 1131454,
+              name: "Leche",
+              price: 5000,
+              has_toppings: false,
+              in_stock: true,
+            },
+          ],
+        },
+      ],
     });
   }
   if (

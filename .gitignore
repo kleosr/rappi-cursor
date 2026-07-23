@@ -6,4 +6,3 @@ out/
 .env
 .env.*
 .rappi-config.json
-.vscode-test/
