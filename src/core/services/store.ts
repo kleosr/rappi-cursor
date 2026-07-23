@@ -2,14 +2,33 @@ import type { RappiConfig } from "../schemas/config";
 import type { StoreDetail, StoreCatalog } from "../schemas/store";
 import { get, post } from "../http";
 
+type MenuResponse = {
+  corridors?: StoreDetail["corridors"];
+  scheduled_orders?: unknown;
+};
+
+export async function getStoreMenu(
+  storeId: number,
+  config: RappiConfig
+): Promise<MenuResponse> {
+  return get<MenuResponse>(
+    `/api/restaurant-bus/store/${storeId}/menu`,
+    config
+  );
+}
+
 export async function getStoreDetail(
   storeId: number,
   config: RappiConfig
 ): Promise<StoreDetail> {
-  return get<StoreDetail>(
-    `/api/web-gateway/web/stores-router/id/${storeId}/`,
-    config
-  );
+  const [store, menu] = await Promise.all([
+    get<StoreDetail>(`/api/web-gateway/web/stores-router/id/${storeId}/`, config),
+    getStoreMenu(storeId, config).catch(() => ({ corridors: undefined })),
+  ]);
+  if (!store.corridors?.length && menu.corridors?.length) {
+    store.corridors = menu.corridors;
+  }
+  return store;
 }
 
 export async function getRestaurantCatalog(
