@@ -131,6 +131,7 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
           productId: msg.productId,
           name: msg.name,
           price: msg.price,
+          storeType: msg.storeType || DEFAULT_STORE_TYPE,
           toppings,
         });
         return;
@@ -144,8 +145,9 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
         const quantity = Number(msg.quantity) || 1;
         const toppings = (msg.toppings as number[]) || [];
         const price = Number(msg.price) || 0;
+        const storeType = String(msg.storeType || DEFAULT_STORE_TYPE);
         await addToCart(
-          DEFAULT_STORE_TYPE,
+          storeType,
           [
             {
               id: storeId,
@@ -512,6 +514,7 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
             productId: btn.getAttribute("data-prod"),
             name: btn.getAttribute("data-name"),
             price: Number(btn.getAttribute("data-price")),
+            storeType: btn.getAttribute("data-store-type") || "restaurant",
           };
           if (hasTop) {
             setLoading($("productOut"), "Loading options…");
@@ -627,7 +630,8 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
                 'id ' + p.product_id + '</div></div>' +
                 '<div class="actions"><span class="price">' + money(p.price) + '</span>' +
                 '<button class="' + (p.has_toppings ? 'ghost' : 'primary') + '" data-prod="' + p.product_id +
-                '" data-store="' + s.store_id + '" data-name="' + escapeHtml(p.name) +
+                '" data-store="' + s.store_id + '" data-store-type="' + escapeHtml(s.store_type || 'restaurant') +
+                '" data-name="' + escapeHtml(p.name) +
                 '" data-price="' + p.price + '" data-top="' + (p.has_toppings?"1":"0") + '">' +
                 (p.has_toppings ? "Options" : "Add") + '</button></div></div>'
             ).join("");
@@ -662,17 +666,19 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
         case "storeResult": {
           const store = msg.store;
           const corridors = store.corridors || [];
+          const storeTypeId = (store.store_type && (store.store_type.id || store.store_type)) || "restaurant";
           $("browseOut").innerHTML =
             '<div class="store-block"><div class="heading">' + escapeHtml(store.name) + '</div>' +
             '<div class="meta">' + escapeHtml(store.address||'') + ' · ' +
-            escapeHtml(store.status?.status||'') + '</div></div>' +
+            escapeHtml(store.status?.status||'') + ' · ' + escapeHtml(String(storeTypeId)) + '</div></div>' +
             corridors.map((c) =>
               '<div class="section-label">' + escapeHtml(c.name) + '</div>' +
               (c.products||[]).slice(0,12).map((p) =>
                 '<div class="row-item"><div><p class="title">' + escapeHtml(p.name) + '</p></div>' +
                 '<div class="actions"><span class="price">' + money(p.price) + '</span>' +
                 '<button class="' + (p.has_toppings ? 'ghost' : 'primary') + '" data-prod="' + p.id +
-                '" data-store="' + store.store_id + '" data-name="' + escapeHtml(p.name) +
+                '" data-store="' + store.store_id + '" data-store-type="' + escapeHtml(String(storeTypeId)) +
+                '" data-name="' + escapeHtml(p.name) +
                 '" data-price="' + p.price + '" data-top="' + (p.has_toppings?"1":"0") + '">' +
                 (p.has_toppings?"Options":"Add") + '</button></div></div>'
               ).join("")
@@ -705,6 +711,7 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
               productId: String(msg.productId),
               name: msg.name,
               price: msg.price,
+              storeType: msg.storeType || "restaurant",
               quantity: 1,
               toppings,
             });
