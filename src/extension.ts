@@ -3,10 +3,11 @@ import { ConfigStore } from "./core/configStore";
 import { SyncService } from "./sync/SyncService";
 import { RappiSidebarProvider } from "./ui/webview/RappiSidebarProvider";
 import { getUser, isPrime } from "./core/services/auth";
-import { getCarts, resolveStoreType, recalculateCart } from "./core/services/cart";
+import { getCarts, resolveStoreType, recalculateCart, primaryCartStoreType } from "./core/services/cart";
 import { getCheckoutDetail } from "./core/services/checkout";
 import { placeOrder, getOrders } from "./core/services/order";
 import { search } from "./core/services/search";
+import { getAddresses } from "./core/services/address";
 import { DEFAULT_STORE_TYPE } from "./core/constants";
 import { formatPrice } from "./core/formatters";
 
@@ -97,10 +98,20 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     try {
-      const config = await configStore.setupFromToken({
+      let config = await configStore.setupFromToken({
         token,
         deviceId: deviceId || undefined,
       });
+      try {
+        const { addresses } = await getAddresses(config);
+        const active = addresses.find((a) => a.active) || addresses[0];
+        if (active && typeof active.lat === "number" && typeof active.lng === "number") {
+          await configStore.updateCoords(active.lat, active.lng);
+          config = await configStore.load();
+        }
+      } catch {
+        /* keep default coords if addresses fail */
+      }
       const user = await getUser(config);
       const prime = await isPrime(config);
       void vscode.window.showInformationMessage(
@@ -225,7 +236,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("rappi.checkout", async () => {
       try {
         const config = await configStore.load();
-        const resolved = await resolveStoreType(DEFAULT_STORE_TYPE, config);
+        const storeType = await primaryCartStoreType(config, DEFAULT_STORE_TYPE);
+        const resolved = await resolveStoreType(storeType, config);
         const [cart, detail] = await Promise.allSettled([
           recalculateCart(resolved, config),
           getCheckoutDetail(resolved, config),
@@ -262,7 +274,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (confirm !== "Place order") return;
       try {
         const config = await configStore.load();
-        const resolved = await resolveStoreType(DEFAULT_STORE_TYPE, config);
+        const storeType = await primaryCartStoreType(config, DEFAULT_STORE_TYPE);
+        const resolved = await resolveStoreType(storeType, config);
         const result = await placeOrder(resolved, config);
         await syncService?.syncNow();
         void vscode.window.showInformationMessage(

@@ -165,8 +165,11 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
 
       case "removeFromCart": {
         const config = await this.configStore.load();
-        const storeType = String(msg.storeType || DEFAULT_STORE_TYPE);
-        await removeFromCart(storeType, String(msg.productId), config);
+        await removeFromCart(
+          msg.storeType ? String(msg.storeType) : undefined,
+          String(msg.productId),
+          config
+        );
         await this.sync.syncNow();
         reply({ type: "toast", message: "Removed from cart" });
         return;
@@ -563,15 +566,17 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
         el.innerHTML = empty("Cart empty", "Add items from Browse.");
         return;
       }
-      lastStoreType = carts[0].store_type || "restaurant";
+      lastStoreType =
+        carts[0].store_type_origin || carts[0].store_type || "restaurant";
       el.innerHTML = carts.map((c) => {
+        const st = c.store_type_origin || c.store_type || "restaurant";
         const stores = (c.stores||[]).map((s) => {
           const products = (s.products||[]).map((p) =>
             '<div class="row-item">' +
               '<div><p class="title">' + label(p.name) + ' ×' + p.units + '</p>' +
               '<div class="meta">' + label(p.id) + '</div></div>' +
               '<div class="actions"><span class="price">' + money(p.total || p.price) + '</span>' +
-              '<button class="ghost" data-rm="' + escapeHtml(p.id) + '" data-st="' + escapeHtml(c.store_type) + '">Remove</button></div>' +
+              '<button class="ghost" data-rm="' + escapeHtml(p.id) + '" data-st="' + escapeHtml(st) + '">Remove</button></div>' +
             '</div>'
           ).join("");
           return '<div class="store-block"><div class="heading">' + label(s.name) +
@@ -579,7 +584,10 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
             products +
             '<div style="margin-top:8px">Total <span class="price">' + money(s.total) + '</span></div></div>';
         }).join("");
-        return '<div class="meta" style="margin-bottom:8px">Type: ' + label(c.store_type) + '</div>' + stores;
+        return '<div class="meta" style="margin-bottom:8px">Type: ' + label(c.store_type) +
+          (c.store_type_origin && c.store_type_origin !== c.store_type
+            ? ' → ' + label(c.store_type_origin) : '') +
+          ' <button class="ghost" data-checkout-st="' + escapeHtml(st) + '">Checkout</button></div>' + stores;
       }).join("");
       el.querySelectorAll("[data-rm]").forEach((btn) => {
         btn.onclick = () => vscode.postMessage({
@@ -587,6 +595,12 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
           productId: btn.getAttribute("data-rm"),
           storeType: btn.getAttribute("data-st"),
         });
+      });
+      el.querySelectorAll("[data-checkout-st]").forEach((btn) => {
+        btn.onclick = () => {
+          lastStoreType = btn.getAttribute("data-checkout-st") || lastStoreType;
+          vscode.postMessage({ type: "checkout", storeType: lastStoreType });
+        };
       });
     }
 
