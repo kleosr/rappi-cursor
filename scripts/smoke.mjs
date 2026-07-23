@@ -12,10 +12,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { formatPrice, imageUrl } = require(join(root, "out/core/formatters.js"));
 const { DEFAULT_STORE_TYPE, BASE_URL } = require(join(root, "out/core/constants.js"));
 const { RappiHttpError } = require(join(root, "out/core/http.js"));
-const { addToCart, findCartForProduct, apiStoreType } = require(join(
-  root,
-  "out/core/services/cart.js"
-));
+const {
+  addToCart,
+  findCartForProduct,
+  apiStoreType,
+  productMatchesId,
+} = require(join(root, "out/core/services/cart.js"));
 const { coordsFromBridge } = require(join(root, "out/core/config.js"));
 const fs = require("fs");
 
@@ -51,7 +53,7 @@ const fakeCarts = [
     store_type_origin: "market",
     stores: [
       {
-        products: [{ id: "900022095_1131454", name: "x" }],
+        products: [{ id: "900022095_1131454", product_id: 1131454, name: "x" }],
       },
     ],
   },
@@ -63,10 +65,26 @@ if (!found || apiStoreType(found) !== "market") {
 if (findCartForProduct(fakeCarts, "missing")) {
   fail("findCartForProduct should miss unknown ids");
 }
+if (!productMatchesId(fakeCarts[0].stores[0].products[0], "1131454")) {
+  fail("productMatchesId must match bare product suffix");
+}
+if (!findCartForProduct(fakeCarts, "1131454")) {
+  fail("findCartForProduct must fuzzy-match bare product id");
+}
 
 const cartSrc = fs.readFileSync(join(root, "src/core/services/cart.ts"), "utf8");
 if (!cartSrc.includes("findCartForProduct")) {
   fail("removeFromCart must look up product cart");
+}
+if (cartSrc.includes("encodeURIComponent")) {
+  fail("removeFromCart must not encodeURIComponent the product id");
+}
+if (!cartSrc.includes("store_type_origin")) {
+  fail("removeFromCart must retry store_type_origin on 404");
+}
+const httpSrc = fs.readFileSync(join(root, "src/core/http.ts"), "utf8");
+if (!httpSrc.includes("!text.trim()")) {
+  fail("del() must tolerate empty 2xx bodies");
 }
 const orderSrc = fs.readFileSync(join(root, "src/core/services/order.ts"), "utf8");
 if (!orderSrc.includes("assertCartPlaceable")) {
