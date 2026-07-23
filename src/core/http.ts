@@ -24,8 +24,21 @@ function buildHeaders(config: RappiConfig): Record<string, string> {
   };
 }
 
-async function parseJson<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
+async function parseJsonBody<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
+}
+
+async function errorSnippet(res: Response): Promise<string> {
+  try {
+    const errorBody = await res.text();
+    return errorBody ? ` (${errorBody.substring(0, 100)})` : "";
+  } catch {
+    return "";
+  }
 }
 
 export async function get<T>(path: string, config: RappiConfig): Promise<T> {
@@ -39,7 +52,7 @@ export async function get<T>(path: string, config: RappiConfig): Promise<T> {
       path
     );
   }
-  return parseJson<T>(res);
+  return parseJsonBody<T>(res);
 }
 
 export async function post<T>(
@@ -53,20 +66,14 @@ export async function post<T>(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    let errorBody = "";
-    try {
-      errorBody = await res.text();
-    } catch {
-      /* ignore */
-    }
-    const details = errorBody ? ` (${errorBody.substring(0, 100)})` : "";
+    const details = await errorSnippet(res);
     throw new RappiHttpError(
       `POST ${path} → ${res.status} ${res.statusText}${details}`,
       res.status,
       path
     );
   }
-  return parseJson<T>(res);
+  return parseJsonBody<T>(res);
 }
 
 export async function put<T>(
@@ -86,7 +93,7 @@ export async function put<T>(
       path
     );
   }
-  return parseJson<T>(res);
+  return parseJsonBody<T>(res);
 }
 
 export async function del<T>(path: string, config: RappiConfig): Promise<T> {
@@ -95,11 +102,12 @@ export async function del<T>(path: string, config: RappiConfig): Promise<T> {
     headers: buildHeaders(config),
   });
   if (!res.ok) {
+    const details = await errorSnippet(res);
     throw new RappiHttpError(
-      `DELETE ${path} → ${res.status} ${res.statusText}`,
+      `DELETE ${path} → ${res.status} ${res.statusText}${details}`,
       res.status,
       path
     );
   }
-  return parseJson<T>(res);
+  return parseJsonBody<T>(res);
 }

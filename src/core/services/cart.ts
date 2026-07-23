@@ -2,8 +2,9 @@ import type { RappiConfig } from "../schemas/config";
 import type {
   CartStoreInput,
   CartResponse,
+  CartProductResponse,
 } from "../schemas/cart";
-import { del, post, put } from "../http";
+import { del, post, put, RappiHttpError } from "../http";
 
 export async function addToCart(
   storeType: string,
@@ -71,13 +72,51 @@ export function apiStoreType(cart: CartResponse): string {
   return cart.store_type_origin || cart.store_type;
 }
 
+/** Match compound id, bare suffix, or passthrough product_id. */
+export function productMatchesId(
+  product: CartProductResponse,
+  productId: string
+): boolean {
+  if (product.id === productId) return true;
+  if (product.id.endsWith(`_${productId}`)) return true;
+  if (productId.endsWith(`_${product.id}`)) return true;
+  const raw = (product as { product_id?: unknown }).product_id;
+  if (raw == null) return false;
+  const pid = String(raw);
+  return pid === productId || productId.endsWith(`_${pid}`);
+}
+
+function listCartProductIds(carts: CartResponse[]): string[] {
+  const ids: string[] = [];
+  for (const c of carts) {
+    for (const s of c.stores ?? []) {
+      for (const p of s.products ?? []) {
+        if (p.id) ids.push(p.id);
+      }
+    }
+  }
+  return ids;
+}
+
 export function findCartForProduct(
   carts: CartResponse[],
   productId: string
 ): CartResponse | undefined {
   return carts.find((c) =>
-    c.stores.some((s) => s.products.some((p) => p.id === productId))
+    c.stores.some((s) => s.products.some((p) => productMatchesId(p, productId)))
   );
+}
+
+export function resolveCartProductId(
+  cart: CartResponse,
+  productId: string
+): string {
+  for (const s of cart.stores ?? []) {
+    for (const p of s.products ?? []) {
+      if (productMatchesId(p, productId)) return p.id;
+    }
+  }
+  return productId;
 }
 
 /** First non-empty cart's API store type, else DEFAULT restaurant. */
@@ -98,15 +137,37 @@ export async function removeFromCart(
   const carts = await getCarts(config);
   const cart = findCartForProduct(carts, productId);
   if (!cart) {
+    const ids = listCartProductIds(carts);
+    const listed = ids.length ? ids.join(", ") : "(cart empty)";
     throw new Error(
-      `Product "${productId}" not found in cart. Run get_cart / refresh Cart and use the compound id shown there.`
+      `Product "${productId}" not found in cart. Available ids: ${listed}`
     );
   }
-  const apiType = apiStoreType(cart);
-  return del(
-    `/api/ms/shopping-cart/v2/${apiType}/product/${encodeURIComponent(productId)}`,
-    config
-  );
+
+  const resolvedId = resolveCartProductId(cart, productId);
+  const primary = cart.store_type;
+  const origin = cart.store_type_origin;
+  const types = [primary];
+  if (origin && origin !== primary) types.push(origin);
+
+  let lastError: unknown;
+  for (let i = 0; i < types.length; i++) {
+    const storeType = types[i];
+    try {
+      // Path must use the raw compound id (no URI encoding).
+      return await del(
+        `/api/ms/shopping-cart/v2/${storeType}/product/${resolvedId}`,
+        config
+      );
+    } catch (err) {
+      lastError = err;
+      const is404 =
+        err instanceof RappiHttpError && err.status === 404;
+      if (is404 && i < types.length - 1) continue;
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 export async function assertCartPlaceable(
