@@ -6,6 +6,7 @@ import {
   loadConfigFromDisk,
   saveConfigToDisk,
   bridgeConfigPath,
+  coordsFromBridge,
 } from "../core/config";
 import { DEFAULT_COORDS } from "../core/constants";
 
@@ -15,8 +16,10 @@ const STATE_LAT = "rappi.lat";
 const STATE_LNG = "rappi.lng";
 
 /**
- * SecretStorage is primary. Bridge file (~/.config/rappi-cursor/config.json)
- * is written only on persist so MCP can share credentials — never on every read.
+ * SecretStorage is primary for token/deviceId.
+ * Bridge file (~/.config/rappi-cursor/config.json) is written on persist for MCP,
+ * and lat/lng are re-read from the bridge on load so MCP set_address is visible
+ * to the sidebar (same dual-surface session).
  */
 export class ConfigStore {
   constructor(private readonly ctx: vscode.ExtensionContext) {}
@@ -37,16 +40,31 @@ export class ConfigStore {
   async load(): Promise<RappiConfig> {
     const token = await this.ctx.secrets.get(SECRET_TOKEN);
     const deviceId = await this.ctx.secrets.get(SECRET_DEVICE);
-    const lat =
+    const fallbackLat =
       this.ctx.globalState.get<number>(STATE_LAT) ??
       vscode.workspace.getConfiguration("rappi").get<number>("defaultLat") ??
       DEFAULT_COORDS.lat;
-    const lng =
+    const fallbackLng =
       this.ctx.globalState.get<number>(STATE_LNG) ??
       vscode.workspace.getConfiguration("rappi").get<number>("defaultLng") ??
       DEFAULT_COORDS.lng;
 
     if (token && deviceId) {
+      let disk: RappiConfig | null = null;
+      try {
+        disk = loadConfigFromDisk();
+      } catch {
+        disk = null;
+      }
+      const { lat, lng } = coordsFromBridge(
+        { lat: fallbackLat, lng: fallbackLng },
+        disk
+      );
+      // Keep globalState aligned when MCP (or another process) updated the bridge
+      if (lat !== fallbackLat || lng !== fallbackLng) {
+        await this.ctx.globalState.update(STATE_LAT, lat);
+        await this.ctx.globalState.update(STATE_LNG, lng);
+      }
       return { token, deviceId, lat, lng };
     }
 

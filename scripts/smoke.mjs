@@ -13,6 +13,7 @@ const { formatPrice, imageUrl } = require(join(root, "out/core/formatters.js"));
 const { DEFAULT_STORE_TYPE, BASE_URL } = require(join(root, "out/core/constants.js"));
 const { RappiHttpError } = require(join(root, "out/core/http.js"));
 const { addToCart } = require(join(root, "out/core/services/cart.js"));
+const { coordsFromBridge } = require(join(root, "out/core/config.js"));
 const fs = require("fs");
 
 const fail = (m) => {
@@ -28,7 +29,27 @@ if (!BASE_URL.includes("grability.rappi.com")) fail("base url");
 const err = new RappiHttpError("x", 401, "/t");
 if (!err.isAuthError) fail("RappiHttpError.isAuthError");
 
+// MCP set_address writes bridge coords; sidebar load must prefer them over globalState defaults
+const fallback = { lat: 4.624335, lng: -74.063644 };
+const bridge = { lat: 6.2442, lng: -75.5812 };
+const merged = coordsFromBridge(fallback, bridge);
+if (merged.lat !== bridge.lat || merged.lng !== bridge.lng) {
+  fail(`coordsFromBridge should prefer bridge, got ${JSON.stringify(merged)}`);
+}
+const noDisk = coordsFromBridge(fallback, null);
+if (noDisk.lat !== fallback.lat || noDisk.lng !== fallback.lng) {
+  fail("coordsFromBridge should keep fallback when bridge missing");
+}
+
 const mcpSrc = fs.readFileSync(join(root, "src/mcp/server.ts"), "utf8");
+if (!mcpSrc.includes("saveConfigToDisk(config)")) {
+  fail("MCP set_address must still write bridge coords");
+}
+const storeSrc = fs.readFileSync(join(root, "src/core/configStore.ts"), "utf8");
+if (!storeSrc.includes("coordsFromBridge")) {
+  fail("ConfigStore.load must merge bridge coords via coordsFromBridge");
+}
+
 const tools = [...mcpSrc.matchAll(/server\.tool\(\s*"([^"]+)"/g)].map((m) => m[1]);
 const expected = [
   "whoami",
@@ -61,4 +82,5 @@ console.log("smoke ok:", {
   tools: tools.length,
   publisher: pkg.publisher,
   version: pkg.version,
+  coordsFromBridge: "ok",
 });
