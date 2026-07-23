@@ -4,7 +4,9 @@ Cursor/VS Code extension to order from Rappi without opening the app every five 
 
 I built it out of laziness. Phone search got annoying. If it helps you, cool. If not, also fine. MIT — do what you want.
 
-Unofficial. Not from Rappi. Wrapper over the same web API that [rappi-cli](https://github.com/crafter-station/rappi-cli) uses.
+Unofficial. Not from Rappi. Wrapper over the same **consumer Grability** HTTP API that [rappi-cli](https://github.com/crafter-station/rappi-cli) uses (`services.grability.rappi.com`).
+
+**What this extension is not:** it does **not** implement the [Dev Portal Aliados](https://dev-portal.rappi.com/api/es/) partner API (Auth0 `client_id` / `x-authorization`), and it does **not** ship the rappi-cli local Hono REST facade (`GET /api/whoami`, `POST /api/cart/add`, …). Surfaces here are the sidebar UI + MCP tools over Grability only.
 
 ## What it does
 
@@ -48,7 +50,7 @@ A real token usually starts with `ft.gAAAAA`. If you see something else, you pic
 From a release `.vsix`:
 
 ```bash
-cursor --install-extension rappi-cursor-0.1.0.vsix --force
+cursor --install-extension rappi-cursor-0.1.3.vsix --force
 ```
 
 Or from source:
@@ -59,7 +61,7 @@ cd rappi-cursor
 npm install
 npm run compile
 npm run package
-cursor --install-extension rappi-cursor-0.1.0.vsix --force
+cursor --install-extension rappi-cursor-0.1.3.vsix --force
 ```
 
 Reload Window. Orange Rappi icon in the activity bar. Hit **Iniciar sesion en Rappi** and paste the token.
@@ -81,7 +83,7 @@ After login, the token is also written to `~/.config/rappi-cursor/config.json` (
 
 If you installed the vsix, the path is usually something like:
 
-`~/.cursor/extensions/kleosr.rappi-cursor-0.1.0/out/mcp/server.js`
+`~/.cursor/extensions/kleosr.rappi-cursor-0.1.3/out/mcp/server.js`
 
 Tools: `whoami`, `search`, `list_restaurants`, `get_store`, `get_product_options`, `add_to_cart`, `remove_from_cart`, `get_cart`, `checkout_preview`, `set_tip`, `place_order`, `track_orders`, `list_addresses`, `set_address`.
 
@@ -91,11 +93,12 @@ Before `place_order` or `set_address`, confirm with a human. Seriously.
 
 ```bash
 npm install
-npm run check
+npm run check   # compile + smoke + offline e2e
+npm run e2e     # offline mocks; live whoami/cart/search if ~/.config/rappi-cursor/config.json has a token
 npm run watch
 ```
 
-F5 with the extension host launch if you are in the repo.
+F5 with the extension host launch if you are in the repo. Live e2e never calls `place_order`. Optional one live remove: `RAPPI_E2E_REMOVE=1 npm run e2e`.
 
 ## Security
 
