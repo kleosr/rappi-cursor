@@ -62,6 +62,26 @@ export function defaultCoordsFromEnv(): { lat: number; lng: number } {
   return { lat, lng };
 }
 
+/**
+ * Prefer bridge lat/lng when present so MCP set_address is visible to the sidebar.
+ * Token/device stay SecretStorage-primary; coords follow the shared bridge file.
+ */
+export function coordsFromBridge(
+  fallback: { lat: number; lng: number },
+  disk: { lat: number; lng: number } | null | undefined
+): { lat: number; lng: number } {
+  if (
+    disk &&
+    typeof disk.lat === "number" &&
+    Number.isFinite(disk.lat) &&
+    typeof disk.lng === "number" &&
+    Number.isFinite(disk.lng)
+  ) {
+    return { lat: disk.lat, lng: disk.lng };
+  }
+  return fallback;
+}
+
 /** Alias used by MCP (parity with upstream loadConfig). */
 export async function loadConfig(): Promise<RappiConfig> {
   return loadConfigFromDisk();
