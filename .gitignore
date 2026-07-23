@@ -6,4 +6,7 @@ out/
 .env
 .env.*
 .rappi-config.json
-.vscode-test/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
