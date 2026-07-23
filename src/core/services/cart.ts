@@ -60,19 +60,74 @@ export async function resolveStoreType(
   config: RappiConfig
 ): Promise<string> {
   const carts = await getCarts(config);
-  const cart = carts.find((c) => c.store_type === storeType);
-  return cart?.store_type_origin || storeType;
+  const cart =
+    carts.find((c) => c.store_type === storeType) ||
+    carts.find((c) => c.store_type_origin === storeType);
+  return cart?.store_type_origin || cart?.store_type || storeType;
+}
+
+/** API path segment for cart mutations (prefer origin when Rappi remaps types). */
+export function apiStoreType(cart: CartResponse): string {
+  return cart.store_type_origin || cart.store_type;
+}
+
+export function findCartForProduct(
+  carts: CartResponse[],
+  productId: string
+): CartResponse | undefined {
+  return carts.find((c) =>
+    c.stores.some((s) => s.products.some((p) => p.id === productId))
+  );
+}
+
+/** First non-empty cart's API store type, else DEFAULT restaurant. */
+export async function primaryCartStoreType(
+  config: RappiConfig,
+  fallback = "restaurant"
+): Promise<string> {
+  const carts = await getCarts(config);
+  const cart = carts.find((c) => c.stores?.some((s) => s.products?.length));
+  return cart ? apiStoreType(cart) : fallback;
 }
 
 export async function removeFromCart(
-  storeType: string,
+  _storeTypeHint: string | undefined,
   productId: string,
   config: RappiConfig
 ): Promise<unknown> {
+  const carts = await getCarts(config);
+  const cart = findCartForProduct(carts, productId);
+  if (!cart) {
+    throw new Error(
+      `Product "${productId}" not found in cart. Run get_cart / refresh Cart and use the compound id shown there.`
+    );
+  }
+  const apiType = apiStoreType(cart);
   return del(
-    `/api/ms/shopping-cart/v2/${storeType}/product/${productId}`,
+    `/api/ms/shopping-cart/v2/${apiType}/product/${encodeURIComponent(productId)}`,
     config
   );
+}
+
+export async function assertCartPlaceable(
+  storeType: string,
+  config: RappiConfig
+): Promise<CartResponse> {
+  const cart = await recalculateCart(storeType, config);
+  if (!cart.stores?.length) {
+    throw new Error("Cart is empty");
+  }
+  const invalid = cart.stores.filter((s) => !s.valid);
+  if (invalid.length) {
+    const reasons = invalid
+      .map(
+        (s) =>
+          `${s.name}: ${s.is_open ? "products unavailable" : "store is closed"}`
+      )
+      .join("; ");
+    throw new Error(`Cannot place order: ${reasons}`);
+  }
+  return cart;
 }
 
 export async function recalculateCart(

@@ -273,12 +273,15 @@ server.tool(
 
 server.tool(
   "remove_from_cart",
-  "Remove a product from the shopping cart by its compound ID (e.g. '900006505_3522980')",
+  "Remove a product from the shopping cart by its compound ID from get_cart (e.g. '900006505_3522980'). Looks up the product's cart and uses the correct store_type automatically — do not guess restaurant.",
   {
     product_id: z
       .string()
       .describe("Compound product ID from get_cart (e.g. '900006505_3522980')"),
-    store_type: z.string().optional().default(DEFAULT_STORE_TYPE),
+    store_type: z
+      .string()
+      .optional()
+      .describe("Ignored; store type is detected from the cart that contains the product"),
   },
   async ({ product_id, store_type }) => {
     const config = await loadConfig();

@@ -12,7 +12,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { formatPrice, imageUrl } = require(join(root, "out/core/formatters.js"));
 const { DEFAULT_STORE_TYPE, BASE_URL } = require(join(root, "out/core/constants.js"));
 const { RappiHttpError } = require(join(root, "out/core/http.js"));
-const { addToCart } = require(join(root, "out/core/services/cart.js"));
+const { addToCart, findCartForProduct, apiStoreType } = require(join(
+  root,
+  "out/core/services/cart.js"
+));
 const { coordsFromBridge } = require(join(root, "out/core/config.js"));
 const fs = require("fs");
 
@@ -39,6 +42,35 @@ if (merged.lat !== bridge.lat || merged.lng !== bridge.lng) {
 const noDisk = coordsFromBridge(fallback, null);
 if (noDisk.lat !== fallback.lat || noDisk.lng !== fallback.lng) {
   fail("coordsFromBridge should keep fallback when bridge missing");
+}
+
+// remove_from_cart must resolve cart by product id (not hardcode restaurant)
+const fakeCarts = [
+  {
+    store_type: "market",
+    store_type_origin: "market",
+    stores: [
+      {
+        products: [{ id: "900022095_1131454", name: "x" }],
+      },
+    ],
+  },
+];
+const found = findCartForProduct(fakeCarts, "900022095_1131454");
+if (!found || apiStoreType(found) !== "market") {
+  fail("findCartForProduct/apiStoreType must pick market cart for product");
+}
+if (findCartForProduct(fakeCarts, "missing")) {
+  fail("findCartForProduct should miss unknown ids");
+}
+
+const cartSrc = fs.readFileSync(join(root, "src/core/services/cart.ts"), "utf8");
+if (!cartSrc.includes("findCartForProduct")) {
+  fail("removeFromCart must look up product cart");
+}
+const orderSrc = fs.readFileSync(join(root, "src/core/services/order.ts"), "utf8");
+if (!orderSrc.includes("assertCartPlaceable")) {
+  fail("placeOrder must gate on store.valid");
 }
 
 const mcpSrc = fs.readFileSync(join(root, "src/mcp/server.ts"), "utf8");
@@ -83,4 +115,5 @@ console.log("smoke ok:", {
   publisher: pkg.publisher,
   version: pkg.version,
   coordsFromBridge: "ok",
+  removeLookup: "ok",
 });
