@@ -2,7 +2,7 @@
   "name": "rappi-cursor",
   "displayName": "Rappi",
   "description": "Order from Rappi in Cursor: search, cart, checkout, sync, and MCP tools",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "kleosr",
   "license": "MIT",
   "author": "kleosr",
@@ -126,7 +126,8 @@
     "watch": "tsc -watch -p ./",
     "mcp": "node ./out/mcp/server.js",
     "package": "vsce package",
-    "check": "npm run compile && node scripts/smoke.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "check": "npm run compile && node scripts/smoke.mjs && npm run e2e"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
