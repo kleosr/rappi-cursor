@@ -2,10 +2,11 @@
   "name": "rappi-cursor",
   "displayName": "Rappi",
   "description": "Order from Rappi in Cursor: search, cart, checkout, sync, and MCP tools",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "kleosr",
   "license": "MIT",
   "author": "kleosr",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/kleosr/rappi-cursor.git"

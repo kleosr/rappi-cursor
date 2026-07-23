@@ -1,6 +1,6 @@
 :root {
-  --rappi-accent: #ff4940;
-  --rappi-accent-hover: #e63e36;
+  --rappi-accent: #ff441f;
+  --rappi-accent-hover: #e03a1a;
   --rappi-on-accent: #ffffff;
   --space-1: 4px;
   --space-2: 8px;
@@ -90,8 +90,9 @@ body.locked .app {
 }
 
 
-.brand img {
-  height: 22px;
+.brand img,
+.brand .brand-logo {
+  height: 24px;
   width: auto;
   display: block;
 }

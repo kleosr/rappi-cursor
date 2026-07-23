@@ -314,7 +314,7 @@ export class RappiSidebarProvider implements vscode.WebviewViewProvider {
 <body class="locked">
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <header class="brand">
-    <img src="${logoUri}" alt="Rappi" width="120" height="32" />
+    <img class="brand-logo" src="${logoUri}" alt="rappi" width="96" height="41" />
     <span class="tag">Cursor</span>
   </header>
 
