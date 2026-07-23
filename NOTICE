@@ -1,0 +1,12 @@
+# NOTICE
+
+This project is a Cursor/VS Code extension wrapper inspired by and ported from:
+
+  rappi-cli — https://github.com/crafter-station/rappi-cli
+  (also https://github.com/camilocbarrera/rappi-cli)
+
+Upstream is MIT-licensed. Core HTTP endpoints, cart payload shape, and MCP tool
+names follow that project for feature parity.
+
+Rappi is a trademark of its respective owners. This project is unofficial and
+not affiliated with Rappi.

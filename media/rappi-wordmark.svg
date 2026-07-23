@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32" fill="none" role="img" aria-label="Rappi">
+  <rect x="0" y="2" width="28" height="28" rx="7" fill="#FF4940"/>
+  <path fill="#FFFFFF" d="M6.5 8.2h5.8c2.55 0 4.2 1.4 4.2 3.55 0 1.65-.9 2.85-2.45 3.35L17.2 23.5h-2.9l-2.55-4.55H9V23.5H6.5V8.2zm2.5 2.05v3.85h3.05c1.25 0 2-.65 2-1.9s-.75-1.95-2-1.95H9z"/>
+  <text x="36" y="23" fill="#FF4940" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="700" letter-spacing="-0.02em">Rappi</text>
+</svg>

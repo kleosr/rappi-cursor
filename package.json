@@ -1,0 +1,140 @@
+{
+  "name": "rappi-cursor",
+  "displayName": "Rappi",
+  "description": "Order from Rappi in Cursor: search, cart, checkout, sync, and MCP tools",
+  "version": "0.1.0",
+  "publisher": "kleosr",
+  "license": "MIT",
+  "author": "kleosr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kleosr/rappi-cursor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kleosr/rappi-cursor/issues"
+  },
+  "homepage": "https://github.com/kleosr/rappi-cursor#readme",
+  "keywords": [
+    "rappi",
+    "food-delivery",
+    "mcp",
+    "cursor",
+    "colombia"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rappi",
+          "title": "Rappi",
+          "icon": "media/rappi.svg"
+        }
+      ]
+    },
+    "views": {
+      "rappi": [
+        {
+          "type": "webview",
+          "id": "rappi.sidebar",
+          "name": "Rappi"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "rappi.setup",
+        "title": "Rappi: Iniciar sesion"
+      },
+      {
+        "command": "rappi.login",
+        "title": "Rappi: Iniciar sesion (Login)"
+      },
+      {
+        "command": "rappi.whoami",
+        "title": "Rappi: Who Am I"
+      },
+      {
+        "command": "rappi.search",
+        "title": "Rappi: Search"
+      },
+      {
+        "command": "rappi.cart",
+        "title": "Rappi: Show Cart"
+      },
+      {
+        "command": "rappi.checkout",
+        "title": "Rappi: Checkout Preview"
+      },
+      {
+        "command": "rappi.placeOrder",
+        "title": "Rappi: Place Order"
+      },
+      {
+        "command": "rappi.orders",
+        "title": "Rappi: Track Orders"
+      },
+      {
+        "command": "rappi.syncNow",
+        "title": "Rappi: Sync Now"
+      },
+      {
+        "command": "rappi.openSidebar",
+        "title": "Rappi: Open Sidebar"
+      },
+      {
+        "command": "rappi.logout",
+        "title": "Rappi: Logout"
+      }
+    ],
+    "configuration": {
+      "title": "Rappi",
+      "properties": {
+        "rappi.syncIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 10,
+          "maximum": 300,
+          "description": "Background sync interval for cart and orders (seconds)"
+        },
+        "rappi.defaultLat": {
+          "type": "number",
+          "default": 4.624335,
+          "description": "Default latitude when no address is set (Bogota)"
+        },
+        "rappi.defaultLng": {
+          "type": "number",
+          "default": -74.063644,
+          "description": "Default longitude when no address is set (Bogota)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "mcp": "node ./out/mcp/server.js",
+    "package": "vsce package",
+    "check": "npm run compile && node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.0",
+    "typescript": "^5.8.0"
+  }
+}
