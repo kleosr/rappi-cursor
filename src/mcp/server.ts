@@ -221,7 +221,7 @@ server.tool(
 
 server.tool(
   "add_to_cart",
-  "Add a product to cart. Always search first to get the correct price. If the product has required toppings, call get_product_options first and include topping IDs.",
+  "Add a product to cart. Always search first to get the correct price and store_type. Pass store_type from search results (not only restaurant). If the product has required toppings, call get_product_options first and include topping IDs.",
   {
     store_id: z.number().describe("Store ID"),
     product_id: z.string().describe("Product ID"),
@@ -237,11 +237,16 @@ server.tool(
       .optional()
       .default(0)
       .describe("Product price from search results"),
+    store_type: z
+      .string()
+      .optional()
+      .default(DEFAULT_STORE_TYPE)
+      .describe("Store type from search (e.g. restaurant, market). Required for non-restaurant stores."),
   },
-  async ({ store_id, product_id, name, quantity, toppings, price }) => {
+  async ({ store_id, product_id, name, quantity, toppings, price, store_type }) => {
     const config = await loadConfig();
     const result = await addToCart(
-      DEFAULT_STORE_TYPE,
+      store_type,
       [
         {
           id: store_id,
