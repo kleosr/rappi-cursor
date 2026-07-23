@@ -2,7 +2,7 @@
 
 Cursor/VS Code extension to order from Rappi without opening the app every five minutes.
 
-I built it out of laziness. Phone search got annoying. If it helps you, cool. If not, also fine. MIT — do what you want.
+I built it out of laziness, thanks to infra. Phone search got annoying. If it helps you, cool. If not, also fine. MIT — do what you want.
 
 Unofficial. Not from Rappi. Wrapper over the same **consumer Grability** HTTP API that [rappi-cli](https://github.com/crafter-station/rappi-cli) uses (`services.grability.rappi.com`).
 
@@ -112,4 +112,4 @@ MIT. Copyright (c) 2026 kleosr.
 
 Core HTTP calls come from / are inspired by rappi-cli (MIT). See `NOTICE`.
 
-Rappi is their trademark. This has nothing to do with the company. I made it because I was lazy. That is it.
+Rappi is their trademark. This has nothing to do with the company. I made it because I was lazy — thanks to infra. That is it.
