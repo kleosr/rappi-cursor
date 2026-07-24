@@ -7,3 +7,8 @@ out/
 .env.*
 .rappi-config.json
 .vscode-test/
+
+# Local agent / SDD / index noise (not part of the product)
+.atl/
+openspec/
+.codegraph/

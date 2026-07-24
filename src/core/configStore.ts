@@ -95,6 +95,11 @@ export class ConfigStore {
     await this.persist(config);
   }
 
+  /**
+   * Persist Authorization into SecretStorage + MCP bridge.
+   * When Connect captures a `deviceid`, pass it as `deviceId` (preferred over
+   * any existing secret or a newly generated UUID). API unchanged.
+   */
   async setupFromToken(opts: {
     token: string;
     deviceId?: string;
@@ -110,11 +115,12 @@ export class ConfigStore {
     }
 
     const existingDevice = await this.ctx.secrets.get(SECRET_DEVICE);
+    const capturedDevice = opts.deviceId?.trim();
     const cfg = vscode.workspace.getConfiguration("rappi");
     const config: RappiConfig = {
       token,
-      deviceId:
-        opts.deviceId?.trim() || existingDevice || randomUUID(),
+      // Captured deviceid wins when present; else reuse secret; else generate.
+      deviceId: capturedDevice || existingDevice || randomUUID(),
       lat: opts.lat ?? cfg.get<number>("defaultLat") ?? DEFAULT_COORDS.lat,
       lng: opts.lng ?? cfg.get<number>("defaultLng") ?? DEFAULT_COORDS.lng,
     };

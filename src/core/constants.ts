@@ -1,5 +1,13 @@
 export const BASE_URL = "https://services.grability.rappi.com";
+export const GRABILITY_HOST = "services.grability.rappi.com";
 export const IMAGES_BASE_URL = "https://images.rappi.com";
+export const LOGIN_ORIGIN = "https://www.rappi.com.co";
+export const LOGIN_URL = "https://www.rappi.com.co/login";
+export const CAPTURE_TTL_MS = 120_000;
+export const CAPTURE_ALLOWED_ORIGINS = [
+  "https://www.rappi.com.co",
+  "https://rappi.com.co",
+] as const;
 export const DEFAULT_STORE_TYPE = "restaurant";
 export const DEFAULT_COORDS = { lat: 4.624335, lng: -74.063644 } as const;
 export const CONFIG_FILENAME = ".rappi-config.json";

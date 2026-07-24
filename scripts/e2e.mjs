@@ -8,11 +8,13 @@ import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { homedir } from "os";
+import http from "http";
 import fs from "fs";
 
 const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = "https://services.grability.rappi.com";
+const LOGIN_ORIGIN = "https://www.rappi.com.co";
 
 const {
   getUser,
@@ -512,7 +514,271 @@ async function offlineE2e() {
     fail("cart.ts must export/use productMatchesId");
   }
 
+  await runCaptureHandoffE2e();
+
   console.log("e2e offline ok");
+}
+
+function postCapture(port, body, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: "/capture",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(data),
+          origin: LOGIN_ORIGIN,
+          ...headers,
+        },
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (c) => (raw += c));
+        res.on("end", () =>
+          resolve({ status: res.statusCode, body: raw })
+        );
+      }
+    );
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Work Unit 2 / PR2 — capture → setupFromToken handoff (offline).
+ * Never logs Authorization / Bearer material.
+ */
+async function runCaptureHandoffE2e() {
+  const {
+    startCaptureSession,
+    isConnectAllowed,
+  } = require(join(root, "out/core/sessionCapture.js"));
+  const { completeCaptureHandoff } = require(join(
+    root,
+    "out/core/captureHandoff.js"
+  ));
+  const { LOGIN_URL } = require(join(root, "out/core/constants.js"));
+
+  if (typeof completeCaptureHandoff !== "function") {
+    fail("completeCaptureHandoff export missing");
+  }
+  if (typeof isConnectAllowed !== "function") {
+    fail("isConnectAllowed export missing");
+  }
+  if (LOGIN_URL !== "https://www.rappi.com.co/login") {
+    fail(`LOGIN_URL must be CO login, got ${LOGIN_URL}`);
+  }
+
+  // Synthetic token — never printed.
+  const secretAuth = ["Bea", "rer ", "ft.gAAAAA_E2E_HANDOFF"].join("");
+  const capturedDevice = "e2e-captured-device-42";
+
+  /** @type {{ setupCalls: object[], clearCalls: number, config: object | null }} */
+  const track = { setupCalls: [], clearCalls: 0, config: null };
+
+  function makeStore() {
+    return {
+      async setupFromToken(opts) {
+        track.setupCalls.push({
+          token: opts.token,
+          deviceId: opts.deviceId,
+        });
+        track.config = {
+          token: String(opts.token || "").replace(/^bearer\s+/i, "").trim(),
+          deviceId: opts.deviceId || "generated",
+          lat: 4.624335,
+          lng: -74.063644,
+        };
+        return track.config;
+      },
+      async updateCoords(lat, lng) {
+        if (track.config) {
+          track.config.lat = lat;
+          track.config.lng = lng;
+        }
+      },
+      async load() {
+        if (!track.config) throw new Error("no credentials");
+        return track.config;
+      },
+      async clear() {
+        track.clearCalls += 1;
+        track.config = null;
+      },
+    };
+  }
+
+  // --- valid POST → handoff (setupFromToken + deviceId) ---
+  track.setupCalls = [];
+  track.clearCalls = 0;
+  track.config = null;
+  {
+    const session = await startCaptureSession({ ttlMs: 10_000 });
+    try {
+      const waiting = session.waitForCapture();
+      const post = await postCapture(session.port, {
+        nonce: session.nonce,
+        authorization: secretAuth,
+        deviceid: capturedDevice,
+      });
+      if (post.status !== 200) {
+        fail(`valid capture POST expected 200, got ${post.status}`);
+      }
+      const payload = await waiting;
+      if (!payload?.authorization) {
+        fail("waitForCapture must return authorization payload");
+      }
+      if (payload.deviceid !== capturedDevice) {
+        fail("waitForCapture must include captured deviceid");
+      }
+
+      const store = makeStore();
+      const result = await completeCaptureHandoff(store, payload, {
+        getAddresses: async () => ({
+          addresses: [{ active: true, lat: 4.7, lng: -74.1 }],
+        }),
+        getUser: async () => ({ name: "E2E User", email: "e2e@test" }),
+        isPrime: async () => true,
+      });
+      if (!result.ok) {
+        fail(`valid handoff should succeed, got ${result.error}`);
+      }
+      if (track.setupCalls.length !== 1) {
+        fail(`setupFromToken call count ${track.setupCalls.length}, want 1`);
+      }
+      if (track.setupCalls[0].deviceId !== capturedDevice) {
+        fail("setupFromToken must receive captured deviceId");
+      }
+      if (track.clearCalls !== 0) {
+        fail("valid handoff must not clear credentials");
+      }
+      if (track.config?.lat !== 4.7 || track.config?.lng !== -74.1) {
+        fail("handoff should apply address coords when present");
+      }
+    } finally {
+      session.dispose();
+    }
+  }
+  ok("capture handoff: valid POST → setupFromToken");
+
+  // --- bad nonce → no setupFromToken ---
+  track.setupCalls = [];
+  track.clearCalls = 0;
+  {
+    const session = await startCaptureSession({ ttlMs: 10_000 });
+    try {
+      const bad = await postCapture(session.port, {
+        nonce: "not-the-session-nonce",
+        authorization: secretAuth,
+      });
+      if (bad.status === 200) {
+        fail("invalid nonce must not accept capture");
+      }
+      if (track.setupCalls.length !== 0) {
+        fail("invalid nonce path must not call setupFromToken");
+      }
+    } finally {
+      session.dispose();
+    }
+  }
+  ok("capture handoff: bad nonce → no setupFromToken");
+
+  // --- expired nonce → no setupFromToken ---
+  track.setupCalls = [];
+  {
+    const session = await startCaptureSession({ ttlMs: 40 });
+    await sleep(80);
+    let lateStatus;
+    try {
+      const late = await postCapture(session.port, {
+        nonce: session.nonce,
+        authorization: secretAuth,
+      });
+      lateStatus = late.status;
+    } catch (err) {
+      // Listener closed after TTL — connection refused is also a reject.
+      lateStatus = "closed";
+      if (!/ECONNREFUSED|expired|410/.test(String(err))) {
+        /* still treated as reject */
+      }
+    }
+    if (lateStatus === 200) {
+      fail("expired capture must not accept POST");
+    }
+    if (track.setupCalls.length !== 0) {
+      fail("expired nonce path must not call setupFromToken");
+    }
+    session.dispose();
+  }
+  ok("capture handoff: expired → no setupFromToken");
+
+  // --- validation fail → clear ---
+  track.setupCalls = [];
+  track.clearCalls = 0;
+  track.config = null;
+  {
+    const store = makeStore();
+    const result = await completeCaptureHandoff(
+      store,
+      {
+        nonce: "n",
+        authorization: secretAuth,
+        deviceid: capturedDevice,
+      },
+      {
+        getAddresses: async () => ({ addresses: [] }),
+        getUser: async () => {
+          throw new Error("unauthorized mock");
+        },
+        isPrime: async () => false,
+      }
+    );
+    if (result.ok) fail("validation failure must not report ok");
+    if (track.setupCalls.length !== 1) {
+      fail("validation-fail path still persists then clears");
+    }
+    if (track.clearCalls !== 1) {
+      fail(`validation fail must clear credentials, clearCalls=${track.clearCalls}`);
+    }
+    if (!/unauthorized mock/i.test(result.error || "")) {
+      fail("validation-fail error must be non-token message");
+    }
+    if (/ft\.gAAAAA|Bearer\s+ft/i.test(JSON.stringify(result))) {
+      fail("handoff result must never echo Bearer/token material");
+    }
+  }
+  ok("capture handoff: validation fail → clear");
+
+  // Extension Connect wiring (source contract for PR2)
+  const extSrc = fs.readFileSync(join(root, "src/extension.ts"), "utf8");
+  if (!extSrc.includes("isConnectAllowed")) {
+    fail("extension must gate Connect with isConnectAllowed");
+  }
+  if (!extSrc.includes("startCaptureSession")) {
+    fail("extension must startCaptureSession on Connect");
+  }
+  if (!extSrc.includes("completeCaptureHandoff")) {
+    fail("extension must hand off via completeCaptureHandoff");
+  }
+  if (!extSrc.includes("LOGIN_URL")) {
+    fail("extension must open LOGIN_URL for Connect");
+  }
+  if (!/Advanced|avanzad/i.test(extSrc)) {
+    fail("extension must demote paste to advanced after Connect miss/refuse");
+  }
+  if (/console\.(log|info|debug|warn|error)\([^)]*authorization/i.test(extSrc)) {
+    fail("extension must never log Authorization");
+  }
+  ok("capture handoff: extension Connect wiring");
 }
 
 async function liveGate() {
