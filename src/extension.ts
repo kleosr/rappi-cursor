@@ -8,8 +8,14 @@ import { getCheckoutDetail } from "./core/services/checkout";
 import { placeOrder, getOrders } from "./core/services/order";
 import { search } from "./core/services/search";
 import { getAddresses } from "./core/services/address";
-import { DEFAULT_STORE_TYPE } from "./core/constants";
+import { DEFAULT_STORE_TYPE, LOGIN_URL } from "./core/constants";
 import { formatPrice } from "./core/formatters";
+import {
+  isConnectAllowed,
+  startCaptureSession,
+  type CaptureSession,
+} from "./core/sessionCapture";
+import { completeCaptureHandoff } from "./core/captureHandoff";
 
 let syncService: SyncService | undefined;
 
@@ -54,31 +60,23 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  const runSetup = async () => {
-    const start = await vscode.window.showInformationMessage(
-      "Para pedir en Rappi debes iniciar sesión con tu cuenta. Te abrimos Rappi en el navegador; después pegas el token de autenticación.",
-      { modal: true },
-      "Abrir Rappi e iniciar sesión",
-      "Ya inicié sesión - pegar token"
+  const ADVANCED_PASTE = "Advanced: paste Authorization";
+
+  const finishAuthenticated = async (userName: string, prime: boolean) => {
+    void vscode.window.showInformationMessage(
+      `Sesión Rappi OK: ${userName}${prime ? " (Prime)" : ""}. Ya puedes buscar y pedir.`
     );
-    if (!start) return;
+    syncService?.start();
+    await syncService?.syncNow();
+    await vscode.commands.executeCommand("rappi.sidebar.focus");
+  };
 
-    if (start === "Abrir Rappi e iniciar sesión") {
-      await vscode.env.openExternal(
-        vscode.Uri.parse("https://www.rappi.com.co/login")
-      );
-      const next = await vscode.window.showInformationMessage(
-        "1) Inicia sesión en Rappi (teléfono / WhatsApp).\n2) Abre DevTools (F12) → Network.\n3) Filtra por grability.rappi.com.\n4) Copia el header Authorization (ft.gAAAAA…).",
-        { modal: true },
-        "Pegar token"
-      );
-      if (next !== "Pegar token") return;
-    }
-
+  /** Advanced fallback — DevTools paste; not the default Connect path. */
+  const runAdvancedPaste = async () => {
     const token = await vscode.window.showInputBox({
-      title: "Token de Rappi",
+      title: "Advanced · Token de Rappi",
       prompt:
-        "Pega Authorization (ft.gAAAAA…). El prefijo Bearer es opcional.",
+        "Pega Authorization (ft.gAAAAA…). El prefijo Bearer es opcional. Prefer Connect when available.",
       password: true,
       ignoreFocusOut: true,
       placeHolder: "ft.gAAAAA…",
@@ -91,7 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const deviceId = await vscode.window.showInputBox({
-      title: "deviceid (opcional)",
+      title: "Advanced · deviceid (opcional)",
       prompt:
         "Mismo request de Network → header deviceid. Vacío = generar uno nuevo.",
       ignoreFocusOut: true,
@@ -105,7 +103,11 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const { addresses } = await getAddresses(config);
         const active = addresses.find((a) => a.active) || addresses[0];
-        if (active && typeof active.lat === "number" && typeof active.lng === "number") {
+        if (
+          active &&
+          typeof active.lat === "number" &&
+          typeof active.lng === "number"
+        ) {
           await configStore.updateCoords(active.lat, active.lng);
           config = await configStore.load();
         }
@@ -114,21 +116,103 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const user = await getUser(config);
       const prime = await isPrime(config);
-      void vscode.window.showInformationMessage(
-        `Sesión Rappi OK: ${user.name}${prime ? " (Prime)" : ""}. Ya puedes buscar y pedir.`
-      );
-      syncService?.start();
-      await syncService?.syncNow();
-      await vscode.commands.executeCommand("rappi.sidebar.focus");
+      await finishAuthenticated(user.name, prime);
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(
-        `No se pudo autenticar en Rappi: ${
-          err instanceof Error ? err.message : String(err)
-        }. Vuelve a intentar Rappi: Iniciar sesión.`
+        `No se pudo autenticar en Rappi: ${msg.replace(/Bearer\s+\S+/gi, "[redacted]")}. Vuelve a intentar Rappi: Iniciar sesión.`
       );
       await configStore.clear();
       await syncService?.syncNow();
     }
+  };
+
+  const runConnect = async (): Promise<"ok" | "miss"> => {
+    let session: CaptureSession | undefined;
+    try {
+      session = await startCaptureSession();
+      await vscode.env.openExternal(vscode.Uri.parse(LOGIN_URL));
+      await vscode.env.openExternal(vscode.Uri.parse(session.installUrl));
+      void vscode.window.showInformationMessage(
+        "Connect: inicia sesión en rappi.com.co, luego usa Connect Cursor en la página helper y refresca la pestaña de Rappi."
+      );
+
+      const payload = await session.waitForCapture();
+      session.dispose();
+      session = undefined;
+
+      const result = await completeCaptureHandoff(configStore, payload, {
+        getAddresses,
+        getUser,
+        isPrime,
+      });
+      if (!result.ok) {
+        void vscode.window.showErrorMessage(
+          `No se pudo autenticar en Rappi: ${result.error}. Vuelve a intentar Connect o usa advanced paste.`
+        );
+        await syncService?.syncNow();
+        return "miss";
+      }
+      await finishAuthenticated(result.userName, result.isPrime);
+      return "ok";
+    } catch {
+      session?.dispose();
+      return "miss";
+    }
+  };
+
+  const offerAdvancedAfterMiss = async () => {
+    const again = await vscode.window.showWarningMessage(
+      "No se capturó la sesión a tiempo. Reintenta Connect o usa advanced paste (DevTools).",
+      { modal: true },
+      "Retry Connect",
+      ADVANCED_PASTE
+    );
+    if (again === "Retry Connect") {
+      if ((await runConnect()) === "ok") return;
+      const fallback = await vscode.window.showWarningMessage(
+        "Connect no capturó la sesión. Puedes pegar Authorization en modo advanced.",
+        { modal: true },
+        ADVANCED_PASTE
+      );
+      if (fallback === ADVANCED_PASTE) {
+        await runAdvancedPaste();
+      }
+      return;
+    }
+    if (again === ADVANCED_PASTE) {
+      await runAdvancedPaste();
+    }
+  };
+
+  const runSetup = async () => {
+    if (!isConnectAllowed(vscode.env.remoteName)) {
+      const choice = await vscode.window.showWarningMessage(
+        "Connect solo funciona en Cursor local (no Remote SSH). Usa advanced paste en esta máquina remota.",
+        { modal: true },
+        ADVANCED_PASTE
+      );
+      if (choice === ADVANCED_PASTE) {
+        await runAdvancedPaste();
+      }
+      return;
+    }
+
+    const start = await vscode.window.showInformationMessage(
+      "Connect Cursor a Rappi: abrimos rappi.com.co. Inicia sesión y usa el helper Connect Cursor — sin DevTools.",
+      { modal: true },
+      "Connect",
+      ADVANCED_PASTE
+    );
+    if (!start) return;
+
+    if (start === ADVANCED_PASTE) {
+      await runAdvancedPaste();
+      return;
+    }
+
+    if ((await runConnect()) === "ok") return;
+    await offerAdvancedAfterMiss();
   };
 
   context.subscriptions.push(
